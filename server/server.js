@@ -61,6 +61,42 @@ wss.on("connection", (ws) => {
 
         }
 
+        if(message.type === "pair"){
+
+    let tablet = devices[message.tabletID];
+
+    if(tablet){
+
+        ws.send(JSON.stringify({
+
+            type:"pair_success",
+
+            tabletID:message.tabletID
+
+        }));
+
+
+        tablet.send(JSON.stringify({
+
+            type:"pair_request",
+
+            phoneID:message.phoneID
+
+        }));
+
+    }else{
+
+        ws.send(JSON.stringify({
+
+            type:"pair_failed",
+
+            message:"Tablet not found"
+
+        }));
+
+    }
+
+}
 
     });
 
