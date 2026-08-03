@@ -1,1 +1,13 @@
-
+{
+  "name": "nexus-server",
+  "version": "1.0.0",
+  "description": "Nexus Link Realtime Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.18.0"
+  }
+}
