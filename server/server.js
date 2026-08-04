@@ -23,6 +23,20 @@ const wss = new WebSocketServer({
 let devices = {};
 
 
+setInterval(() => {
+
+    wss.clients.forEach((client) => {
+
+        if(client.readyState === 1){
+
+            client.ping();
+
+        }
+
+    });
+
+}, 7000);
+
 wss.on("connection", (ws) => {
 
     console.log("Device Connected");
