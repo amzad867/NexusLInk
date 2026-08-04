@@ -37,11 +37,11 @@ wss.on("connection", (ws) => {
 
         if(message.type === "register"){
 
-            devices[message.deviceID] = ws;
+            devices[message.deviceId] = ws;
 
             console.log(
                 "Registered:",
-                message.deviceID
+                message.deviceId
             );
 
         }
