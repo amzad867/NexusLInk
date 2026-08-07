@@ -37,9 +37,15 @@ setInterval(() => {
 
 }, 7000);
 
-wss.on("connection", (ws) => {
+ws.on("close", (code, reason) => {
 
-    console.log("Device Connected");
+    console.log(
+        "Disconnected:",
+        code,
+        reason.toString()
+    );
+
+});
 
 
     ws.on("message", (data) => {
