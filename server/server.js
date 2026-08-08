@@ -1,5 +1,6 @@
 const express = require("express");
 const { WebSocketServer } = require("ws");
+const crypto = require("crypto");
 
 const app = express();
 
@@ -25,19 +26,21 @@ const server = app.listen(PORT, () => {
 
 
 const wss = new WebSocketServer({
-
     server
-
 });
 
 
 
+// Connected devices
+
 let devices = {};
 
 
-// Offline message storage
+// Message storage
 
-let pendingMessages = {};
+let messages = [];
+
+
 
 
 
@@ -67,15 +70,23 @@ wss.on("connection", (ws) => {
 
 
 
-            // =========================
-            // DEVICE REGISTER
-            // =========================
+
+            // =====================
+            // REGISTER
+            // =====================
 
 
             if(message.type === "register"){
 
 
-                devices[message.deviceId] = ws;
+
+                devices[message.deviceId] = {
+
+                    socket: ws,
+
+                    type: message.deviceType
+
+                };
 
 
 
@@ -87,40 +98,45 @@ wss.on("connection", (ws) => {
 
 
 
+
                 // Send pending messages
 
-                if(
-                    pendingMessages[message.deviceId]
-                    &&
-                    pendingMessages[message.deviceId].length > 0
-                ){
+
+                messages.forEach((msg)=>{
+
+
+                    if(
+                        msg.receiver === message.deviceId
+                        &&
+                        msg.status === "pending"
+                    ){
 
 
 
-                    pendingMessages[message.deviceId].forEach(
-                        msg => {
+                        ws.send(
+                            JSON.stringify({
 
+                                type:"tablet_message",
 
-                            ws.send(
-                                JSON.stringify(msg)
-                            );
+                                messageId:msg.id,
 
+                                message:msg.message
 
-                        }
-                    );
-
-
-
-                    console.log(
-                        "Pending messages delivered:",
-                        message.deviceId
-                    );
+                            })
+                        );
 
 
 
-                    delete pendingMessages[message.deviceId];
+                        console.log(
+                            "Pending sent:",
+                            msg.id
+                        );
 
-                }
+
+                    }
+
+
+                });
 
 
 
@@ -130,52 +146,67 @@ wss.on("connection", (ws) => {
 
 
 
-            // =========================
-            // NORMAL SEND
-            // =========================
 
 
-            if(message.type === "send"){
-
-
-                let target =
-                    devices[message.target];
-
-
-
-                if(target){
-
-
-                    target.send(
-
-                        JSON.stringify(message)
-
-                    );
-
-
-
-                    console.log(
-                        "Message sent:",
-                        message.target
-                    );
-
-
-                }
-
-
-            }
-
-
-
-
-
-
-            // =========================
-            // TABLET TO PHONE MESSAGE
-            // =========================
+            // =====================
+            // TABLET MESSAGE
+            // =====================
 
 
             if(message.type === "tablet_message"){
+
+
+
+                let id =
+                    crypto.randomUUID();
+
+
+
+
+                let newMessage = {
+
+
+                    id:id,
+
+
+                    sender:"tablet",
+
+
+                    receiver:message.phoneID,
+
+
+                    message:message.message,
+
+
+                    status:"pending",
+
+
+                    time:Date.now()
+
+
+                };
+
+
+
+                // SAVE FIRST
+
+
+                messages.push(
+                    newMessage
+                );
+
+
+
+                console.log(
+                    "Message Saved:",
+                    id
+                );
+
+
+
+
+
+                // Try delivery
 
 
 
@@ -184,67 +215,39 @@ wss.on("connection", (ws) => {
 
 
 
-
-                let sendData = {
-
-
-                    type:"tablet_message",
-
-                    message:message.message
-
-
-                };
-
-
-
-
                 if(phone){
 
 
 
-                    phone.send(
+                    phone.socket.send(
+                        JSON.stringify({
 
-                        JSON.stringify(sendData)
+                            type:"tablet_message",
 
+                            messageId:id,
+
+                            message:message.message
+
+                        })
                     );
 
 
 
                     console.log(
-                        "Tablet message sent to phone"
+                        "Delivery Attempt:",
+                        id
                     );
-
 
 
                 }else{
 
 
-
                     console.log(
-                        "Phone offline. Saving message:",
+                        "Phone offline:",
                         message.phoneID
                     );
 
 
-
-                    if(
-                        !pendingMessages[message.phoneID]
-                    ){
-
-
-                        pendingMessages[message.phoneID] = [];
-
-
-                    }
-
-
-
-                    pendingMessages[message.phoneID].push(
-                        sendData
-                    );
-
-
-
                 }
 
 
@@ -257,67 +260,35 @@ wss.on("connection", (ws) => {
 
 
 
-
-            // =========================
-            // PAIR SYSTEM
-            // =========================
-
-
-            if(message.type === "pair"){
+            // =====================
+            // DELIVERY ACK
+            // =====================
 
 
-
-                let tablet =
-                    devices[message.tabletID];
+            if(message.type === "message_received"){
 
 
 
-                if(tablet){
-
-
-
-                    ws.send(
-                        JSON.stringify({
-
-                            type:"pair_success",
-
-                            tabletID:message.tabletID
-
-                        })
+                let msg =
+                    messages.find(
+                        m =>
+                        m.id === message.messageId
                     );
 
 
 
+                if(msg){
 
-                    tablet.send(
-                        JSON.stringify({
 
-                            type:"pair_request",
 
-                            phoneID:message.phoneID
-
-                        })
-                    );
+                    msg.status =
+                        "delivered";
 
 
 
                     console.log(
-                        "Pair request sent"
-                    );
-
-
-
-                }else{
-
-
-                    ws.send(
-                        JSON.stringify({
-
-                            type:"pair_failed",
-
-                            message:"Tablet not found"
-
-                        })
+                        "Delivered:",
+                        msg.id
                     );
 
 
@@ -331,11 +302,13 @@ wss.on("connection", (ws) => {
 
 
 
-        }catch(error){
+
+        }
+        catch(error){
 
 
             console.log(
-                "Message Error:",
+                "Error:",
                 error.message
             );
 
@@ -352,8 +325,8 @@ wss.on("connection", (ws) => {
 
 
 
-    ws.on("close", () => {
 
+    ws.on("close",()=>{
 
 
         console.log(
@@ -365,7 +338,9 @@ wss.on("connection", (ws) => {
         for(let id in devices){
 
 
-            if(devices[id] === ws){
+            if(
+                devices[id].socket === ws
+            ){
 
 
                 delete devices[id];
@@ -381,7 +356,6 @@ wss.on("connection", (ws) => {
 
 
         }
-
 
 
     });
