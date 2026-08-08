@@ -266,7 +266,7 @@ if(message.type === "notification"){
         if(id !== message.deviceId){
 
 
-            devices[id].send(
+            devices[id].socket.send(
 
                 JSON.stringify(message)
 
@@ -286,9 +286,6 @@ if(message.type === "notification"){
 
 
 }
-
-
-
 
 
 
