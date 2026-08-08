@@ -1,12 +1,9 @@
 const express = require("express");
 const { WebSocketServer } = require("ws");
 
-
 const app = express();
 
-
 const PORT = process.env.PORT || 3000;
-
 
 
 app.get("/", (req, res) => {
@@ -38,11 +35,18 @@ const wss = new WebSocketServer({
 let devices = {};
 
 
+// Offline message storage
+
+let pendingMessages = {};
+
+
 
 wss.on("connection", (ws) => {
 
 
-    console.log("Device Connected");
+    console.log(
+        "Device Connected"
+    );
 
 
 
@@ -63,7 +67,10 @@ wss.on("connection", (ws) => {
 
 
 
+            // =========================
             // DEVICE REGISTER
+            // =========================
+
 
             if(message.type === "register"){
 
@@ -73,12 +80,48 @@ wss.on("connection", (ws) => {
 
 
                 console.log(
-
                     "Registered:",
-
-                    message.deviceId
-
+                    message.deviceId,
+                    message.deviceType
                 );
+
+
+
+                // Send pending messages
+
+                if(
+                    pendingMessages[message.deviceId]
+                    &&
+                    pendingMessages[message.deviceId].length > 0
+                ){
+
+
+
+                    pendingMessages[message.deviceId].forEach(
+                        msg => {
+
+
+                            ws.send(
+                                JSON.stringify(msg)
+                            );
+
+
+                        }
+                    );
+
+
+
+                    console.log(
+                        "Pending messages delivered:",
+                        message.deviceId
+                    );
+
+
+
+                    delete pendingMessages[message.deviceId];
+
+                }
+
 
 
             }
@@ -86,12 +129,17 @@ wss.on("connection", (ws) => {
 
 
 
+
+            // =========================
             // NORMAL SEND
+            // =========================
+
 
             if(message.type === "send"){
 
 
-                let target = devices[message.target];
+                let target =
+                    devices[message.target];
 
 
 
@@ -105,12 +153,10 @@ wss.on("connection", (ws) => {
                     );
 
 
+
                     console.log(
-
                         "Message sent:",
-
                         message.target
-
                     );
 
 
@@ -123,13 +169,32 @@ wss.on("connection", (ws) => {
 
 
 
+
+            // =========================
             // TABLET TO PHONE MESSAGE
+            // =========================
+
 
             if(message.type === "tablet_message"){
 
 
 
-                let phone = devices[message.phoneID];
+                let phone =
+                    devices[message.phoneID];
+
+
+
+
+                let sendData = {
+
+
+                    type:"tablet_message",
+
+                    message:message.message
+
+
+                };
+
 
 
 
@@ -139,22 +204,14 @@ wss.on("connection", (ws) => {
 
                     phone.send(
 
-                        JSON.stringify({
-
-                            type:"tablet_message",
-
-                            message:message.message
-
-                        })
+                        JSON.stringify(sendData)
 
                     );
 
 
 
                     console.log(
-
                         "Tablet message sent to phone"
-
                     );
 
 
@@ -162,16 +219,34 @@ wss.on("connection", (ws) => {
                 }else{
 
 
+
                     console.log(
-
-                        "Phone not found:",
-
+                        "Phone offline. Saving message:",
                         message.phoneID
-
                     );
 
 
+
+                    if(
+                        !pendingMessages[message.phoneID]
+                    ){
+
+
+                        pendingMessages[message.phoneID] = [];
+
+
+                    }
+
+
+
+                    pendingMessages[message.phoneID].push(
+                        sendData
+                    );
+
+
+
                 }
+
 
 
             }
@@ -182,13 +257,18 @@ wss.on("connection", (ws) => {
 
 
 
+
+            // =========================
             // PAIR SYSTEM
+            // =========================
+
 
             if(message.type === "pair"){
 
 
 
-                let tablet = devices[message.tabletID];
+                let tablet =
+                    devices[message.tabletID];
 
 
 
@@ -196,31 +276,33 @@ wss.on("connection", (ws) => {
 
 
 
-                    ws.send(JSON.stringify({
+                    ws.send(
+                        JSON.stringify({
 
-                        type:"pair_success",
+                            type:"pair_success",
 
-                        tabletID:message.tabletID
+                            tabletID:message.tabletID
 
-                    }));
+                        })
+                    );
 
 
 
 
-                    tablet.send(JSON.stringify({
+                    tablet.send(
+                        JSON.stringify({
 
-                        type:"pair_request",
+                            type:"pair_request",
 
-                        phoneID:message.phoneID
+                            phoneID:message.phoneID
 
-                    }));
+                        })
+                    );
 
 
 
                     console.log(
-
                         "Pair request sent"
-
                     );
 
 
@@ -228,15 +310,15 @@ wss.on("connection", (ws) => {
                 }else{
 
 
+                    ws.send(
+                        JSON.stringify({
 
-                    ws.send(JSON.stringify({
+                            type:"pair_failed",
 
-                        type:"pair_failed",
+                            message:"Tablet not found"
 
-                        message:"Tablet not found"
-
-                    }));
-
+                        })
+                    );
 
 
                 }
@@ -248,15 +330,13 @@ wss.on("connection", (ws) => {
 
 
 
-        } catch(error){
+
+        }catch(error){
 
 
             console.log(
-
                 "Message Error:",
-
                 error.message
-
             );
 
 
@@ -277,14 +357,9 @@ wss.on("connection", (ws) => {
 
 
         console.log(
-
             "Device Disconnected"
-
         );
 
-
-
-        // remove disconnected device
 
 
         for(let id in devices){
@@ -297,11 +372,8 @@ wss.on("connection", (ws) => {
 
 
                 console.log(
-
                     "Removed:",
-
                     id
-
                 );
 
 
@@ -313,7 +385,6 @@ wss.on("connection", (ws) => {
 
 
     });
-
 
 
 
