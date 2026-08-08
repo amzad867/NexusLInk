@@ -254,6 +254,39 @@ wss.on("connection", (ws) => {
 
             }
 
+            
+// NOTIFICATION FROM TABLET
+
+if(message.type === "notification"){
+
+
+    for(let id in devices){
+
+
+        if(id !== message.deviceId){
+
+
+            devices[id].send(
+
+                JSON.stringify(message)
+
+            );
+
+
+            console.log(
+                "Notification sent to:",
+                id
+            );
+
+
+        }
+
+
+    }
+
+
+}
+
 
 
 
