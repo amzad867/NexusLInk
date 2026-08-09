@@ -254,6 +254,41 @@ wss.on("connection", (ws) => {
 
             }
 
+
+            // ============================
+// TABLET LOCATION + BATTERY
+// ============================
+
+if (message.type === "tablet_status") {
+
+    console.log(
+        "Tablet Status:",
+        message
+    );
+
+
+    for (let id in devices) {
+
+        if (
+            id !== message.deviceId &&
+            devices[id].socket.readyState === 1
+        ) {
+
+            devices[id].socket.send(
+                JSON.stringify(message)
+            );
+
+
+            console.log(
+                "Tablet status sent to:",
+                id
+            );
+
+        }
+
+    }
+
+}
             
 // NOTIFICATION FROM TABLET
 
