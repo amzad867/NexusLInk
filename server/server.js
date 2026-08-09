@@ -1,4 +1,4 @@
-```javascript
+
 const express = require("express");
 const { WebSocketServer } = require("ws");
 const crypto = require("crypto");
@@ -534,4 +534,3 @@ wss.on("connection", (ws) => {
     );
 
 });
-```
