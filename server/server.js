@@ -71,13 +71,12 @@ wss.on("connection", (ws) => {
 
 
 
+
             // =====================
             // REGISTER
             // =====================
 
-
             if(message.type === "register"){
-
 
 
                 devices[message.deviceId] = {
@@ -98,10 +97,6 @@ wss.on("connection", (ws) => {
 
 
 
-
-                // Send pending messages
-
-
                 messages.forEach((msg)=>{
 
 
@@ -112,8 +107,8 @@ wss.on("connection", (ws) => {
                     ){
 
 
-
                         ws.send(
+
                             JSON.stringify({
 
                                 type:"tablet_message",
@@ -123,13 +118,7 @@ wss.on("connection", (ws) => {
                                 message:msg.message
 
                             })
-                        );
 
-
-
-                        console.log(
-                            "Pending sent:",
-                            msg.id
                         );
 
 
@@ -139,8 +128,8 @@ wss.on("connection", (ws) => {
                 });
 
 
-
             }
+
 
 
 
@@ -168,27 +157,19 @@ wss.on("connection", (ws) => {
 
                     id:id,
 
-
                     sender:"tablet",
-
 
                     receiver:message.phoneID,
 
-
                     message:message.message,
 
-
                     status:"pending",
-
 
                     time:Date.now()
 
 
                 };
 
-
-
-                // SAVE FIRST
 
 
                 messages.push(
@@ -204,12 +185,6 @@ wss.on("connection", (ws) => {
 
 
 
-
-
-                // Try delivery
-
-
-
                 let phone =
                     devices[message.phoneID];
 
@@ -220,6 +195,7 @@ wss.on("connection", (ws) => {
 
 
                     phone.socket.send(
+
                         JSON.stringify({
 
                             type:"tablet_message",
@@ -229,6 +205,7 @@ wss.on("connection", (ws) => {
                             message:message.message
 
                         })
+
                     );
 
 
@@ -239,7 +216,9 @@ wss.on("connection", (ws) => {
                     );
 
 
-                }else{
+                }
+
+                else{
 
 
                     console.log(
@@ -251,76 +230,122 @@ wss.on("connection", (ws) => {
                 }
 
 
+            }
+
+
+
+
+
+
+
+            // ============================
+            // TABLET LOCATION + BATTERY
+            // ============================
+
+
+            if(message.type === "tablet_status"){
+
+
+
+                console.log(
+                    "Tablet Status:",
+                    message
+                );
+
+
+
+                for(let id in devices){
+
+
+
+                    if(
+
+                        id !== message.deviceId
+
+                        &&
+
+                        devices[id].socket.readyState === 1
+
+                    ){
+
+
+
+                        devices[id].socket.send(
+
+                            JSON.stringify(message)
+
+                        );
+
+
+
+                        console.log(
+                            "Tablet status sent:",
+                            id
+                        );
+
+
+                    }
+
+
+                }
+
 
             }
 
 
-            // ============================
-// TABLET LOCATION + BATTERY
-// ============================
-
-if (message.type === "tablet_status") {
-
-    console.log(
-        "Tablet Status:",
-        message
-    );
 
 
-    for (let id in devices) {
-
-        if (
-            id !== message.deviceId &&
-            devices[id].socket.readyState === 1
-        ) {
-
-            devices[id].socket.send(
-                JSON.stringify(message)
-            );
 
 
-            console.log(
-                "Tablet status sent to:",
-                id
-            );
-
-        }
-
-    }
-
-}
-            
-// NOTIFICATION FROM TABLET
-
-if(message.type === "notification"){
 
 
-    for(let id in devices){
+            // =====================
+            // NOTIFICATION
+            // =====================
 
 
-        if(id !== message.deviceId){
+            if(message.type === "notification"){
 
 
-            devices[id].socket.send(
 
-                JSON.stringify(message)
-
-            );
+                for(let id in devices){
 
 
-            console.log(
-                "Notification sent to:",
-                id
-            );
+
+                    if(
+
+                        id !== message.deviceId
+
+                    ){
 
 
-        }
+
+                        devices[id].socket.send(
+
+                            JSON.stringify(message)
+
+                        );
 
 
-    }
+
+                        console.log(
+                            "Notification sent:",
+                            id
+                        );
 
 
-}
+                    }
+
+
+                }
+
+
+            }
+
+
+
+
+
 
 
 
@@ -335,15 +360,17 @@ if(message.type === "notification"){
 
 
                 let msg =
+
                     messages.find(
+
                         m =>
                         m.id === message.messageId
+
                     );
 
 
 
                 if(msg){
-
 
 
                     msg.status =
@@ -360,7 +387,6 @@ if(message.type === "notification"){
                 }
 
 
-
             }
 
 
@@ -369,6 +395,7 @@ if(message.type === "notification"){
 
 
         }
+
         catch(error){
 
 
@@ -390,7 +417,6 @@ if(message.type === "notification"){
 
 
 
-
     ws.on("close",()=>{
 
 
@@ -403,12 +429,14 @@ if(message.type === "notification"){
         for(let id in devices){
 
 
+
             if(
                 devices[id].socket === ws
             ){
 
 
                 delete devices[id];
+
 
 
                 console.log(
