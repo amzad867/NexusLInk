@@ -7,12 +7,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 
+// =====================================================
+// HTTP SERVER
+// =====================================================
+
 app.get("/", (req, res) => {
 
     res.send("Nexus Link Server Running");
 
 });
-
 
 
 const server = app.listen(PORT, () => {
@@ -24,43 +27,46 @@ const server = app.listen(PORT, () => {
 });
 
 
+// =====================================================
+// WEBSOCKET SERVER
+// =====================================================
 
 const wss = new WebSocketServer({
     server
 });
 
 
-
-// Connected devices
+// =====================================================
+// CONNECTED DEVICES
+// =====================================================
 
 let devices = {};
 
 
-// Message storage
+// =====================================================
+// MESSAGE STORAGE
+// =====================================================
 
 let messages = [];
 
 
-
-
+// =====================================================
+// MAIN CONNECTION
+// =====================================================
 
 wss.on("connection", (ws) => {
-
 
     console.log(
         "Device Connected"
     );
 
 
-
     ws.on("message", (data) => {
-
 
         try {
 
-
-            let message = JSON.parse(data);
-
+            const message =
+                JSON.parse(data);
 
 
             console.log(
@@ -70,14 +76,13 @@ wss.on("connection", (ws) => {
 
 
 
+            // =================================================
+            // REGISTER DEVICE
+            // =================================================
 
-
-            // =====================
-            // REGISTER
-            // =====================
-
-            if(message.type === "register"){
-
+            if (
+                message.type === "register"
+            ) {
 
                 devices[message.deviceId] = {
 
@@ -88,7 +93,6 @@ wss.on("connection", (ws) => {
                 };
 
 
-
                 console.log(
                     "Registered:",
                     message.deviceId,
@@ -97,35 +101,63 @@ wss.on("connection", (ws) => {
 
 
 
-                messages.forEach((msg)=>{
+                // =============================================
+                // SEND PENDING TABLET MESSAGES
+                // ONLY TO PHONE
+                // =============================================
+
+                if (
+                    message.deviceType === "phone"
+                ) {
+
+                    messages.forEach((msg) => {
+
+                        if (
+
+                            msg.receiver ===
+                            message.deviceId
+
+                            &&
+
+                            msg.status ===
+                            "pending"
+
+                        ) {
+
+                            if (
+                                ws.readyState === 1
+                            ) {
+
+                                ws.send(
+
+                                    JSON.stringify({
+
+                                        type:
+                                            "tablet_message",
+
+                                        messageId:
+                                            msg.id,
+
+                                        message:
+                                            msg.message
+
+                                    })
+
+                                );
 
 
-                    if(
-                        msg.receiver === message.deviceId
-                        &&
-                        msg.status === "pending"
-                    ){
+                                console.log(
+                                    "Pending message sent:",
+                                    msg.id
+                                );
 
+                            }
 
-                        ws.send(
+                        }
 
-                            JSON.stringify({
+                    });
 
-                                type:"tablet_message",
-
-                                messageId:msg.id,
-
-                                message:msg.message
-
-                            })
-
-                        );
-
-
-                    }
-
-
-                });
+                }
 
 
             }
@@ -135,47 +167,59 @@ wss.on("connection", (ws) => {
 
 
 
-
-
-            // =====================
+            // =================================================
             // TABLET MESSAGE
-            // =====================
+            // TABLET → PHONE ONLY
+            // =================================================
+
+            if (
+                message.type ===
+                "tablet_message"
+            ) {
 
 
-            if(message.type === "tablet_message"){
-
-
-
-                let id =
+                const id =
                     crypto.randomUUID();
 
 
 
+                const phoneID =
+                    message.phoneID ||
+                    "NXL-798D59";
 
-                let newMessage = {
 
 
-                    id:id,
+                const newMessage = {
 
-                    sender:"tablet",
+                    id: id,
 
-                    receiver:message.phoneID,
+                    sender:
+                        message.deviceId ||
+                        "tablet",
 
-                    message:message.message,
+                    receiver:
+                        phoneID,
 
-                    status:"pending",
+                    message:
+                        message.message || "",
 
-                    time:Date.now()
+                    status:
+                        "pending",
 
+                    time:
+                        Date.now()
 
                 };
 
 
 
+                // =============================================
+                // SAVE MESSAGE
+                // =============================================
+
                 messages.push(
                     newMessage
                 );
-
 
 
                 console.log(
@@ -185,45 +229,62 @@ wss.on("connection", (ws) => {
 
 
 
-                let phone =
-                    devices[message.phoneID];
+                // =============================================
+                // FIND PHONE
+                // =============================================
+
+                const phone =
+                    devices[phoneID];
 
 
 
-                if(phone){
+                if (
 
+                    phone
+
+                    &&
+
+                    phone.type ===
+                    "phone"
+
+                    &&
+
+                    phone.socket.readyState === 1
+
+                ) {
 
 
                     phone.socket.send(
 
                         JSON.stringify({
 
-                            type:"tablet_message",
+                            type:
+                                "tablet_message",
 
-                            messageId:id,
+                            messageId:
+                                id,
 
-                            message:message.message
+                            message:
+                                newMessage.message
 
                         })
 
                     );
 
 
-
                     console.log(
-                        "Delivery Attempt:",
-                        id
+                        "Message sent to PHONE:",
+                        phoneID
                     );
 
 
                 }
-
-                else{
+                else {
 
 
                     console.log(
                         "Phone offline:",
-                        message.phoneID
+                        phoneID
                     );
 
 
@@ -237,54 +298,97 @@ wss.on("connection", (ws) => {
 
 
 
+            // =================================================
+            // TABLET STATUS
+            //
+            // TABLET → PHONE ONLY
+            //
+            // Contains:
+            // latitude
+            // longitude
+            // battery
+            // charging
+            // =================================================
 
-            // ============================
-            // TABLET LOCATION + BATTERY
-            // ============================
-
-
-            if(message.type === "tablet_status"){
-
+            if (
+                message.type ===
+                "tablet_status"
+            ) {
 
 
                 console.log(
-                    "Tablet Status:",
+                    "Tablet Status Received:",
                     message
                 );
 
 
 
-                for(let id in devices){
+                const phoneID =
+                    "NXL-798D59";
 
 
 
-                    if(
-
-                        id !== message.deviceId
-
-                        &&
-
-                        devices[id].socket.readyState === 1
-
-                    ){
+                const phone =
+                    devices[phoneID];
 
 
 
-                        devices[id].socket.send(
+                if (
 
-                            JSON.stringify(message)
+                    phone
 
-                        );
+                    &&
+
+                    phone.type ===
+                    "phone"
+
+                    &&
+
+                    phone.socket.readyState === 1
+
+                ) {
 
 
+                    phone.socket.send(
 
-                        console.log(
-                            "Tablet status sent:",
-                            id
-                        );
+                        JSON.stringify({
+
+                            type:
+                                "tablet_status",
+
+                            deviceId:
+                                message.deviceId,
+
+                            latitude:
+                                message.latitude,
+
+                            longitude:
+                                message.longitude,
+
+                            battery:
+                                message.battery,
+
+                            charging:
+                                message.charging
+
+                        })
+
+                    );
 
 
-                    }
+                    console.log(
+                        "Tablet status sent ONLY to phone:",
+                        phoneID
+                    );
+
+
+                }
+                else {
+
+
+                    console.log(
+                        "Phone offline. Tablet status not delivered."
+                    );
 
 
                 }
@@ -297,44 +401,81 @@ wss.on("connection", (ws) => {
 
 
 
+            // =================================================
+            // TABLET NOTIFICATION
+            //
+            // TABLET → PHONE ONLY
+            // =================================================
+
+            if (
+                message.type ===
+                "notification"
+            ) {
 
 
-            // =====================
-            // NOTIFICATION
-            // =====================
-
-
-            if(message.type === "notification"){
-
-
-
-                for(let id in devices){
-
-
-
-                    if(
-
-                        id !== message.deviceId
-
-                    ){
+                console.log(
+                    "Tablet Notification Received"
+                );
 
 
 
-                        devices[id].socket.send(
-
-                            JSON.stringify(message)
-
-                        );
+                const phoneID =
+                    "NXL-798D59";
 
 
 
-                        console.log(
-                            "Notification sent:",
-                            id
-                        );
+                const phone =
+                    devices[phoneID];
 
 
-                    }
+
+                if (
+
+                    phone
+
+                    &&
+
+                    phone.type ===
+                    "phone"
+
+                    &&
+
+                    phone.socket.readyState === 1
+
+                ) {
+
+
+                    phone.socket.send(
+
+                        JSON.stringify({
+
+                            type:
+                                "notification",
+
+                            deviceId:
+                                message.deviceId,
+
+                            data:
+                                message.data
+
+                        })
+
+                    );
+
+
+                    console.log(
+                        "Notification sent ONLY to phone:",
+                        phoneID
+                    );
+
+
+                }
+                else {
+
+
+                    console.log(
+                        "Phone offline. Notification not delivered."
+                    );
 
 
                 }
@@ -347,39 +488,37 @@ wss.on("connection", (ws) => {
 
 
 
+            // =================================================
+            // MESSAGE DELIVERY ACK
+            // PHONE → SERVER
+            // =================================================
+
+            if (
+                message.type ===
+                "message_received"
+            ) {
 
 
-
-            // =====================
-            // DELIVERY ACK
-            // =====================
-
-
-            if(message.type === "message_received"){
-
-
-
-                let msg =
-
+                const msg =
                     messages.find(
 
                         m =>
-                        m.id === message.messageId
+                            m.id ===
+                            message.messageId
 
                     );
 
 
 
-                if(msg){
+                if (msg) {
 
 
                     msg.status =
                         "delivered";
 
 
-
                     console.log(
-                        "Delivered:",
+                        "Message Delivered:",
                         msg.id
                     );
 
@@ -390,13 +529,8 @@ wss.on("connection", (ws) => {
             }
 
 
-
-
-
-
         }
-
-        catch(error){
+        catch (error) {
 
 
             console.log(
@@ -408,7 +542,6 @@ wss.on("connection", (ws) => {
         }
 
 
-
     });
 
 
@@ -416,8 +549,11 @@ wss.on("connection", (ws) => {
 
 
 
+    // =====================================================
+    // DEVICE DISCONNECTED
+    // =====================================================
 
-    ws.on("close",()=>{
+    ws.on("close", () => {
 
 
         console.log(
@@ -426,17 +562,17 @@ wss.on("connection", (ws) => {
 
 
 
-        for(let id in devices){
+        for (
+            const id in devices
+        ) {
 
 
-
-            if(
+            if (
                 devices[id].socket === ws
-            ){
+            ) {
 
 
                 delete devices[id];
-
 
 
                 console.log(
@@ -452,7 +588,6 @@ wss.on("connection", (ws) => {
 
 
     });
-
 
 
 });
