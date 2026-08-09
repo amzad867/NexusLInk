@@ -51,7 +51,7 @@ let messages = [];
 
 
 // =====================================================
-// MAIN CONNECTION
+// WEBSOCKET CONNECTION
 // =====================================================
 
 wss.on("connection", (ws) => {
@@ -60,6 +60,10 @@ wss.on("connection", (ws) => {
         "Device Connected"
     );
 
+
+    // =================================================
+    // RECEIVE MESSAGE
+    // =================================================
 
     ws.on("message", (data) => {
 
@@ -102,8 +106,7 @@ wss.on("connection", (ws) => {
 
 
                 // =============================================
-                // SEND PENDING TABLET MESSAGES
-                // ONLY TO PHONE
+                // SEND PENDING MESSAGES ONLY TO PHONE
                 // =============================================
 
                 if (
@@ -159,6 +162,129 @@ wss.on("connection", (ws) => {
 
                 }
 
+            }
+
+
+
+
+
+
+            // =================================================
+            // PHONE → TABLET
+            // LOCATION REQUEST
+            // =================================================
+
+            if (
+                message.type ===
+                "location_request"
+            ) {
+
+
+                const phoneID =
+                    message.phoneID;
+
+
+
+                console.log(
+                    "Location request from phone:",
+                    phoneID
+                );
+
+
+
+                // =============================================
+                // FIND TABLET
+                // =============================================
+
+                let tabletID = null;
+
+
+
+                for (
+                    const id in devices
+                ) {
+
+
+                    if (
+                        devices[id].type ===
+                        "tablet"
+                    ) {
+
+                        tabletID = id;
+
+                        break;
+
+                    }
+
+                }
+
+
+
+                if (
+                    tabletID !== null
+                ) {
+
+
+                    const tablet =
+                        devices[tabletID];
+
+
+
+                    if (
+
+                        tablet
+
+                        &&
+
+                        tablet.socket.readyState === 1
+
+                    ) {
+
+
+                        tablet.socket.send(
+
+                            JSON.stringify({
+
+                                type:
+                                    "location_request",
+
+                                phoneID:
+                                    phoneID
+
+                            })
+
+                        );
+
+
+                        console.log(
+                            "Hidden location request sent to tablet:",
+                            tabletID
+                        );
+
+
+                    }
+                    else {
+
+
+                        console.log(
+                            "Tablet socket unavailable"
+                        );
+
+
+                    }
+
+
+                }
+                else {
+
+
+                    console.log(
+                        "No tablet connected"
+                    );
+
+
+                }
+
 
             }
 
@@ -168,8 +294,8 @@ wss.on("connection", (ws) => {
 
 
             // =================================================
+            // TABLET → PHONE
             // TABLET MESSAGE
-            // TABLET → PHONE ONLY
             // =================================================
 
             if (
@@ -213,10 +339,6 @@ wss.on("connection", (ws) => {
 
 
 
-                // =============================================
-                // SAVE MESSAGE
-                // =============================================
-
                 messages.push(
                     newMessage
                 );
@@ -228,10 +350,6 @@ wss.on("connection", (ws) => {
                 );
 
 
-
-                // =============================================
-                // FIND PHONE
-                // =============================================
 
                 const phone =
                     devices[phoneID];
@@ -273,7 +391,7 @@ wss.on("connection", (ws) => {
 
 
                     console.log(
-                        "Message sent to PHONE:",
+                        "Message sent ONLY to phone:",
                         phoneID
                     );
 
@@ -302,12 +420,6 @@ wss.on("connection", (ws) => {
             // TABLET STATUS
             //
             // TABLET → PHONE ONLY
-            //
-            // Contains:
-            // latitude
-            // longitude
-            // battery
-            // charging
             // =================================================
 
             if (
@@ -489,8 +601,7 @@ wss.on("connection", (ws) => {
 
 
             // =================================================
-            // MESSAGE DELIVERY ACK
-            // PHONE → SERVER
+            // DELIVERY ACK
             // =================================================
 
             if (
@@ -549,9 +660,9 @@ wss.on("connection", (ws) => {
 
 
 
-    // =====================================================
+    // =================================================
     // DEVICE DISCONNECTED
-    // =====================================================
+    // =================================================
 
     ws.on("close", () => {
 
