@@ -1,3 +1,4 @@
+```javascript
 const express = require("express");
 const { WebSocketServer } = require("ws");
 const crypto = require("crypto");
@@ -37,7 +38,7 @@ const wss = new WebSocketServer({
 
 
 // =====================================================
-// CONNECTED DEVICES
+// DEVICES
 // =====================================================
 
 let devices = {};
@@ -51,7 +52,7 @@ let messages = [];
 
 
 // =====================================================
-// WEBSOCKET CONNECTION
+// DEVICE CONNECTION
 // =====================================================
 
 wss.on("connection", (ws) => {
@@ -70,7 +71,7 @@ wss.on("connection", (ws) => {
         try {
 
             const message =
-                JSON.parse(data);
+                JSON.parse(data.toString());
 
 
             console.log(
@@ -79,10 +80,9 @@ wss.on("connection", (ws) => {
             );
 
 
-
-            // =================================================
+            // =============================================
             // REGISTER DEVICE
-            // =================================================
+            // =============================================
 
             if (
                 message.type === "register"
@@ -104,239 +104,86 @@ wss.on("connection", (ws) => {
                 );
 
 
+                // -----------------------------------------
+                // SEND PENDING MESSAGES
+                // -----------------------------------------
 
-                // =============================================
-                // SEND PENDING MESSAGES ONLY TO PHONE
-                // =============================================
-
-                if (
-                    message.deviceType === "phone"
-                ) {
-
-                    messages.forEach((msg) => {
+                messages.forEach(
+                    (msg) => {
 
                         if (
 
                             msg.receiver ===
-                            message.deviceId
+                                message.deviceId
 
                             &&
 
                             msg.status ===
-                            "pending"
+                                "pending"
 
                         ) {
 
-                            if (
-                                ws.readyState === 1
-                            ) {
+                            ws.send(
 
-                                ws.send(
+                                JSON.stringify({
 
-                                    JSON.stringify({
+                                    type:
+                                        "tablet_message",
 
-                                        type:
-                                            "tablet_message",
+                                    messageId:
+                                        msg.id,
 
-                                        messageId:
-                                            msg.id,
+                                    message:
+                                        msg.message
 
-                                        message:
-                                            msg.message
+                                })
 
-                                    })
-
-                                );
+                            );
 
 
-                                console.log(
-                                    "Pending message sent:",
-                                    msg.id
-                                );
-
-                            }
+                            console.log(
+                                "Pending sent:",
+                                msg.id
+                            );
 
                         }
 
-                    });
-
-                }
-
-            }
-
-
-
-
-
-
-            // =================================================
-            // PHONE → TABLET
-            // LOCATION REQUEST
-            // =================================================
-
-            if (
-                message.type ===
-                "location_request"
-            ) {
-
-
-                const phoneID =
-                    message.phoneID;
-
-
-
-                console.log(
-                    "Location request from phone:",
-                    phoneID
+                    }
                 );
 
-
-
-                // =============================================
-                // FIND TABLET
-                // =============================================
-
-                let tabletID = null;
-
-
-
-                for (
-                    const id in devices
-                ) {
-
-
-                    if (
-                        devices[id].type ===
-                        "tablet"
-                    ) {
-
-                        tabletID = id;
-
-                        break;
-
-                    }
-
-                }
-
-
-
-                if (
-                    tabletID !== null
-                ) {
-
-
-                    const tablet =
-                        devices[tabletID];
-
-
-
-                    if (
-
-                        tablet
-
-                        &&
-
-                        tablet.socket.readyState === 1
-
-                    ) {
-
-
-                        tablet.socket.send(
-
-                            JSON.stringify({
-
-                                type:
-                                    "location_request",
-
-                                phoneID:
-                                    phoneID
-
-                            })
-
-                        );
-
-
-                        console.log(
-                            "Hidden location request sent to tablet:",
-                            tabletID
-                        );
-
-
-                    }
-                    else {
-
-
-                        console.log(
-                            "Tablet socket unavailable"
-                        );
-
-
-                    }
-
-
-                }
-                else {
-
-
-                    console.log(
-                        "No tablet connected"
-                    );
-
-
-                }
-
-
             }
 
 
-
-
-
-
-            // =================================================
-            // TABLET → PHONE
+            // =============================================
             // TABLET MESSAGE
-            // =================================================
+            // =============================================
 
             if (
                 message.type ===
                 "tablet_message"
             ) {
 
-
                 const id =
                     crypto.randomUUID();
-
-
-
-                const phoneID =
-                    message.phoneID ||
-                    "NXL-798D59";
-
 
 
                 const newMessage = {
 
                     id: id,
 
-                    sender:
-                        message.deviceId ||
-                        "tablet",
+                    sender: "tablet",
 
                     receiver:
-                        phoneID,
+                        message.phoneID,
 
                     message:
-                        message.message || "",
+                        message.message,
 
-                    status:
-                        "pending",
+                    status: "pending",
 
-                    time:
-                        Date.now()
+                    time: Date.now()
 
                 };
-
 
 
                 messages.push(
@@ -350,27 +197,20 @@ wss.on("connection", (ws) => {
                 );
 
 
+                // -----------------------------------------
+                // TRY DELIVERY TO PHONE
+                // -----------------------------------------
 
                 const phone =
-                    devices[phoneID];
-
+                    devices[
+                        message.phoneID
+                    ];
 
 
                 if (
-
-                    phone
-
-                    &&
-
-                    phone.type ===
-                    "phone"
-
-                    &&
-
+                    phone &&
                     phone.socket.readyState === 1
-
                 ) {
-
 
                     phone.socket.send(
 
@@ -383,7 +223,7 @@ wss.on("connection", (ws) => {
                                 id,
 
                             message:
-                                newMessage.message
+                                message.message
 
                         })
 
@@ -391,314 +231,307 @@ wss.on("connection", (ws) => {
 
 
                     console.log(
-                        "Message sent ONLY to phone:",
-                        phoneID
+                        "Delivery Attempt:",
+                        id
                     );
-
 
                 }
                 else {
 
-
                     console.log(
                         "Phone offline:",
-                        phoneID
+                        message.phoneID
                     );
 
-
                 }
-
 
             }
 
 
+            // =============================================
+            // PHONE REQUESTS TABLET LOCATION
+            // =============================================
+
+            if (
+                message.type ===
+                "location_request"
+            ) {
+
+                console.log(
+                    "LOCATION REQUEST FROM PHONE:",
+                    message
+                );
 
 
+                const phoneId =
+                    message.phoneID;
 
 
-            // =================================================
-            // TABLET STATUS
-            //
-            // TABLET → PHONE ONLY
-            // =================================================
+                // -----------------------------------------
+                // FIND TABLETS
+                // -----------------------------------------
+
+                let tabletFound =
+                    false;
+
+
+                for (
+                    const id in devices
+                ) {
+
+                    const device =
+                        devices[id];
+
+
+                    if (
+
+                        device.type ===
+                            "tablet"
+
+                        &&
+
+                        device.socket.readyState === 1
+
+                    ) {
+
+                        tabletFound =
+                            true;
+
+
+                        device.socket.send(
+
+                            JSON.stringify({
+
+                                type:
+                                    "location_request",
+
+                                requestFrom:
+                                    phoneId,
+
+                                requestId:
+                                    crypto.randomUUID()
+
+                            })
+
+                        );
+
+
+                        console.log(
+                            "LOCATION REQUEST SENT TO TABLET:",
+                            id
+                        );
+
+                    }
+
+                }
+
+
+                if (
+                    !tabletFound
+                ) {
+
+                    console.log(
+                        "NO TABLET ONLINE"
+                    );
+
+                }
+
+            }
+
+
+            // =============================================
+            // TABLET LOCATION + BATTERY STATUS
+            // =============================================
 
             if (
                 message.type ===
                 "tablet_status"
             ) {
 
-
                 console.log(
-                    "Tablet Status Received:",
+                    "Tablet Status:",
                     message
                 );
 
 
+                // -----------------------------------------
+                // SEND ONLY TO PHONES
+                // -----------------------------------------
 
-                const phoneID =
-                    "NXL-798D59";
-
-
-
-                const phone =
-                    devices[phoneID];
-
-
-
-                if (
-
-                    phone
-
-                    &&
-
-                    phone.type ===
-                    "phone"
-
-                    &&
-
-                    phone.socket.readyState === 1
-
+                for (
+                    const id in devices
                 ) {
 
-
-                    phone.socket.send(
-
-                        JSON.stringify({
-
-                            type:
-                                "tablet_status",
-
-                            deviceId:
-                                message.deviceId,
-
-                            latitude:
-                                message.latitude,
-
-                            longitude:
-                                message.longitude,
-
-                            battery:
-                                message.battery,
-
-                            charging:
-                                message.charging
-
-                        })
-
-                    );
+                    const device =
+                        devices[id];
 
 
-                    console.log(
-                        "Tablet status sent ONLY to phone:",
-                        phoneID
-                    );
+                    if (
 
+                        device.type ===
+                            "phone"
+
+                        &&
+
+                        device.socket.readyState === 1
+
+                    ) {
+
+                        device.socket.send(
+
+                            JSON.stringify(
+                                message
+                            )
+
+                        );
+
+
+                        console.log(
+                            "Tablet status sent to phone:",
+                            id
+                        );
+
+                    }
 
                 }
-                else {
-
-
-                    console.log(
-                        "Phone offline. Tablet status not delivered."
-                    );
-
-
-                }
-
 
             }
 
 
-
-
-
-
-            // =================================================
+            // =============================================
             // TABLET NOTIFICATION
-            //
-            // TABLET → PHONE ONLY
-            // =================================================
+            // =============================================
 
             if (
                 message.type ===
                 "notification"
             ) {
 
-
-                console.log(
-                    "Tablet Notification Received"
-                );
-
-
-
-                const phoneID =
-                    "NXL-798D59";
-
-
-
-                const phone =
-                    devices[phoneID];
-
-
-
-                if (
-
-                    phone
-
-                    &&
-
-                    phone.type ===
-                    "phone"
-
-                    &&
-
-                    phone.socket.readyState === 1
-
+                for (
+                    const id in devices
                 ) {
 
-
-                    phone.socket.send(
-
-                        JSON.stringify({
-
-                            type:
-                                "notification",
-
-                            deviceId:
-                                message.deviceId,
-
-                            data:
-                                message.data
-
-                        })
-
-                    );
+                    const device =
+                        devices[id];
 
 
-                    console.log(
-                        "Notification sent ONLY to phone:",
-                        phoneID
-                    );
+                    if (
+
+                        device.type ===
+                            "phone"
+
+                        &&
+
+                        device.socket.readyState === 1
+
+                    ) {
+
+                        device.socket.send(
+
+                            JSON.stringify(
+                                message
+                            )
+
+                        );
 
 
-                }
-                else {
+                        console.log(
+                            "Notification sent to phone:",
+                            id
+                        );
 
-
-                    console.log(
-                        "Phone offline. Notification not delivered."
-                    );
-
+                    }
 
                 }
-
 
             }
 
 
-
-
-
-
-            // =================================================
-            // DELIVERY ACK
-            // =================================================
+            // =============================================
+            // MESSAGE DELIVERY ACK
+            // =============================================
 
             if (
                 message.type ===
                 "message_received"
             ) {
 
-
                 const msg =
                     messages.find(
-
-                        m =>
+                        (m) =>
                             m.id ===
                             message.messageId
-
                     );
 
 
-
-                if (msg) {
-
+                if (
+                    msg
+                ) {
 
                     msg.status =
                         "delivered";
 
 
                     console.log(
-                        "Message Delivered:",
+                        "Delivered:",
                         msg.id
                     );
 
-
                 }
-
 
             }
 
 
         }
-        catch (error) {
-
+        catch (
+            error
+        ) {
 
             console.log(
                 "Error:",
                 error.message
             );
 
-
         }
 
-
     });
-
-
-
-
 
 
     // =================================================
     // DEVICE DISCONNECTED
     // =================================================
 
-    ws.on("close", () => {
+    ws.on(
+        "close",
+        () => {
+
+            console.log(
+                "Device Disconnected"
+            );
 
 
-        console.log(
-            "Device Disconnected"
-        );
-
-
-
-        for (
-            const id in devices
-        ) {
-
-
-            if (
-                devices[id].socket === ws
+            for (
+                const id in devices
             ) {
 
+                if (
+                    devices[id].socket === ws
+                ) {
 
-                delete devices[id];
+                    delete devices[id];
 
 
-                console.log(
-                    "Removed:",
-                    id
-                );
+                    console.log(
+                        "Removed:",
+                        id
+                    );
 
+                }
 
             }
 
-
         }
-
-
-    });
-
+    );
 
 });
+```
