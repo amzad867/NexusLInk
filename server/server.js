@@ -513,7 +513,99 @@ wss.on("connection", (ws) => {
                 return;
             }
 
+            // =============================================
+// LIVE SCREEN FRAME
+// =============================================
 
+if (message.type === "screen_frame") {
+
+    const tabletId = message.deviceId;
+
+    console.log(
+        "SCREEN FRAME RECEIVED FROM TABLET:",
+        tabletId
+    );
+
+    for (const id in devices) {
+
+        const device = devices[id];
+
+        if (
+            device.type === "phone" &&
+            device.socket.readyState === 1
+        ) {
+
+            device.socket.send(
+                JSON.stringify({
+                    type: "screen_frame",
+                    deviceId: tabletId,
+                    image: message.image
+                })
+            );
+
+        }
+    }
+
+    console.log(
+        "SCREEN FRAME RELAYED TO PHONE"
+    );
+}
+
+
+// =============================================
+// LIVE SCREEN STARTED
+// =============================================
+
+if (message.type === "screen_started") {
+
+    console.log(
+        "LIVE SCREEN STARTED:",
+        message.deviceId
+    );
+
+    for (const id in devices) {
+
+        const device = devices[id];
+
+        if (
+            device.type === "phone" &&
+            device.socket.readyState === 1
+        ) {
+
+            device.socket.send(
+                JSON.stringify(message)
+            );
+        }
+    }
+}
+
+
+// =============================================
+// LIVE SCREEN STOPPED
+// =============================================
+
+if (message.type === "screen_stopped") {
+
+    console.log(
+        "LIVE SCREEN STOPPED:",
+        message.deviceId
+    );
+
+    for (const id in devices) {
+
+        const device = devices[id];
+
+        if (
+            device.type === "phone" &&
+            device.socket.readyState === 1
+        ) {
+
+            device.socket.send(
+                JSON.stringify(message)
+            );
+        }
+    }
+}
             // =================================================
             // MESSAGE DELIVERY ACK
             // =================================================
