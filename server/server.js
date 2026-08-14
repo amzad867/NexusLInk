@@ -1,443 +1,547 @@
-const express = require("express");
-const { WebSocketServer } = require("ws");
-const crypto = require("crypto");
+const WebSocket = require("ws");
 
-const app = express();
+const PORT = process.env.PORT || 10000;
 
-const PORT =
-    process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-    res.send("Nexus Link Server Running");
+const wss = new WebSocket.Server({
+    port: PORT
 });
 
-const server =
-    app.listen(
-        PORT,
-        () => {
-            console.log(
-                "Server running on port " +
-                PORT
-            );
-        }
-    );
+const devices = new Map();
 
-const wss =
-    new WebSocketServer({
-        server
-    });
+console.log("Nexus Link WebSocket server starting...");
 
-const devices = {};
-
-function sendToPhones(message) {
-
-    for (
-        const id in devices
+function send(ws, data) {
+    if (
+        ws &&
+        ws.readyState === WebSocket.OPEN
     ) {
-
-        const device =
-            devices[id];
-
-        if (
-            device.type === "phone" &&
-            device.socket.readyState === 1
-        ) {
-
-            try {
-                device.socket.send(
-                    JSON.stringify(message)
-                );
-            }
-            catch (e) {
-                console.log(
-                    "PHONE SEND ERROR:",
-                    e.message
-                );
-            }
-        }
+        ws.send(
+            JSON.stringify(data)
+        );
     }
 }
 
-function sendToTablets(message) {
+function getDevice(deviceId) {
+    return devices.get(deviceId);
+}
 
-    for (
-        const id in devices
-    ) {
+function getTablet() {
 
-        const device =
-            devices[id];
+    for (const device of devices.values()) {
 
         if (
-            device.type === "tablet" &&
-            device.socket.readyState === 1
+            device.deviceType === "tablet"
         ) {
-
-            try {
-                device.socket.send(
-                    JSON.stringify(message)
-                );
-            }
-            catch (e) {
-                console.log(
-                    "TABLET SEND ERROR:",
-                    e.message
-                );
-            }
+            return device;
         }
     }
+
+    return null;
+}
+
+function getPhone() {
+
+    for (const device of devices.values()) {
+
+        if (
+            device.deviceType === "phone"
+        ) {
+            return device;
+        }
+    }
+
+    return null;
+}
+
+function relayToTablet(
+    message,
+    targetDeviceId
+) {
+
+    let tablet =
+        targetDeviceId
+            ? getDevice(targetDeviceId)
+            : getTablet();
+
+    if (
+        !tablet ||
+        tablet.ws.readyState !== WebSocket.OPEN
+    ) {
+
+        return false;
+    }
+
+    send(
+        tablet.ws,
+        message
+    );
+
+    return true;
+}
+
+function relayToPhone(
+    message
+) {
+
+    const phone =
+        getPhone();
+
+    if (
+        !phone ||
+        phone.ws.readyState !== WebSocket.OPEN
+    ) {
+
+        return false;
+    }
+
+    send(
+        phone.ws,
+        message
+    );
+
+    return true;
 }
 
 wss.on(
     "connection",
-    (ws) => {
+    function connection(ws) {
 
         console.log(
-            "DEVICE CONNECTED"
+            "Client connected"
         );
+
+        ws.deviceId = null;
+        ws.deviceType = null;
 
         ws.on(
             "message",
-            (data) => {
+            function incoming(raw) {
+
+                let message;
 
                 try {
 
-                    const message =
+                    message =
                         JSON.parse(
-                            data.toString()
+                            raw.toString()
                         );
-
-                    console.log(
-                        "RECEIVED:",
-                        message.type
-                    );
-
-                    // =========================================
-                    // REGISTER
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "register"
-                    ) {
-
-                        const deviceId =
-                            message.deviceId;
-
-                        if (
-                            devices[deviceId]
-                        ) {
-
-                            try {
-                                devices[
-                                    deviceId
-                                ].socket.close();
-                            }
-                            catch (e) {
-                            }
-                        }
-
-                        devices[deviceId] = {
-
-                            socket: ws,
-
-                            type:
-                                message.deviceType
-                        };
-
-                        console.log(
-                            "REGISTERED:",
-                            deviceId,
-                            message.deviceType
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // LOCATION REQUEST
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "location_request"
-                    ) {
-
-                        sendToTablets({
-
-                            type:
-                                "location_request",
-
-                            requestFrom:
-                                message.phoneID,
-
-                            requestId:
-                                crypto.randomUUID()
-                        });
-
-                        return;
-                    }
-
-                    // =========================================
-                    // TABLET STATUS
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "tablet_status"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // SCREEN REQUEST
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "screen_request"
-                    ) {
-
-                        sendToTablets({
-
-                            type:
-                                "screen_request",
-
-                            requestFrom:
-                                message.phoneID,
-
-                            requestId:
-                                crypto.randomUUID()
-                        });
-
-                        return;
-                    }
-
-                    // =========================================
-                    // SCREEN FRAME
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "screen_frame"
-                    ) {
-
-                        sendToPhones({
-
-                            type:
-                                "screen_frame",
-
-                            deviceId:
-                                message.deviceId,
-
-                            image:
-                                message.image
-                        });
-
-                        return;
-                    }
-
-                    // =========================================
-                    // SCREEN STARTED
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "screen_started"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // SCREEN STOPPED
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "screen_stopped"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // SCREEN ERROR
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "screen_error"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // CAMERA REQUEST
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "camera_request"
-                    ) {
-
-                        console.log(
-                            "CAMERA REQUEST FROM PHONE:",
-                            message.phoneID
-                        );
-
-                        sendToTablets({
-
-                            type:
-                                "camera_request",
-
-                            requestFrom:
-                                message.phoneID,
-
-                            requestId:
-                                crypto.randomUUID()
-                        });
-
-                        return;
-                    }
-
-                    // =========================================
-                    // CAMERA FRAME
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "camera_frame"
-                    ) {
-
-                        console.log(
-                            "CAMERA FRAME FROM:",
-                            message.deviceId
-                        );
-
-                        sendToPhones({
-
-                            type:
-                                "camera_frame",
-
-                            deviceId:
-                                message.deviceId,
-
-                            image:
-                                message.image
-                        });
-
-                        return;
-                    }
-
-                    // =========================================
-                    // CAMERA STARTED
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "camera_started"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // CAMERA STOPPED
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "camera_stopped"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
-
-                    // =========================================
-                    // CAMERA ERROR
-                    // =========================================
-
-                    if (
-                        message.type ===
-                        "camera_error"
-                    ) {
-
-                        sendToPhones(
-                            message
-                        );
-
-                        return;
-                    }
 
                 }
                 catch (error) {
 
                     console.log(
-                        "MESSAGE ERROR:",
-                        error.message
+                        "Invalid JSON"
                     );
+
+                    return;
+                }
+
+                const type =
+                    message.type;
+
+                // =================================================
+                // REGISTER
+                // =================================================
+
+                if (
+                    type === "register"
+                ) {
+
+                    const deviceId =
+                        message.deviceId;
+
+                    const deviceType =
+                        message.deviceType;
+
+                    if (
+                        !deviceId ||
+                        !deviceType
+                    ) {
+
+                        return;
+                    }
+
+                    ws.deviceId =
+                        deviceId;
+
+                    ws.deviceType =
+                        deviceType;
+
+                    devices.set(
+                        deviceId,
+                        {
+                            ws,
+                            deviceId,
+                            deviceType
+                        }
+                    );
+
+                    console.log(
+                        "REGISTER:",
+                        deviceId,
+                        deviceType
+                    );
+
+                    // Phone gets currently available tablet
+                    if (
+                        deviceType === "phone"
+                    ) {
+
+                        const tablet =
+                            getTablet();
+
+                        if (tablet) {
+
+                            send(
+                                ws,
+                                {
+                                    type:
+                                        "paired_tablet",
+
+                                    tabletId:
+                                        tablet.deviceId
+                                }
+                            );
+                        }
+                    }
+
+                    // Tablet gets currently available phone
+                    if (
+                        deviceType === "tablet"
+                    ) {
+
+                        const phone =
+                            getPhone();
+
+                        if (phone) {
+
+                            send(
+                                phone.ws,
+                                {
+                                    type:
+                                        "paired_tablet",
+
+                                    tabletId:
+                                        deviceId
+                                }
+                            );
+                        }
+                    }
+
+                    return;
+                }
+
+                // =================================================
+                // LOCATION REQUEST
+                // =================================================
+
+                if (
+                    type ===
+                    "location_request"
+                ) {
+
+                    const target =
+                        message.targetDeviceId;
+
+                    const success =
+                        relayToTablet(
+                            message,
+                            target
+                        );
+
+                    console.log(
+                        "LOCATION REQUEST:",
+                        success
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // SCREEN REQUEST
+                // =================================================
+
+                if (
+                    type ===
+                    "screen_request"
+                ) {
+
+                    const target =
+                        message.targetDeviceId;
+
+                    const success =
+                        relayToTablet(
+                            message,
+                            target
+                        );
+
+                    console.log(
+                        "SCREEN REQUEST:",
+                        success
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // CAMERA REQUEST
+                // =================================================
+
+                if (
+                    type ===
+                    "camera_request"
+                ) {
+
+                    const target =
+                        message.targetDeviceId;
+
+                    const success =
+                        relayToTablet(
+                            message,
+                            target
+                        );
+
+                    console.log(
+                        "CAMERA REQUEST:",
+                        success
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // TABLET STATUS
+                // =================================================
+
+                if (
+                    type ===
+                    "tablet_status"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // SCREEN FRAME
+                // =================================================
+
+                if (
+                    type ===
+                    "screen_frame"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // SCREEN STARTED
+                // =================================================
+
+                if (
+                    type ===
+                    "screen_started"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // SCREEN STOPPED
+                // =================================================
+
+                if (
+                    type ===
+                    "screen_stopped"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // SCREEN ERROR
+                // =================================================
+
+                if (
+                    type ===
+                    "screen_error"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // CAMERA FRAME
+                // =================================================
+
+                if (
+                    type ===
+                    "camera_frame"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // CAMERA STARTED
+                // =================================================
+
+                if (
+                    type ===
+                    "camera_started"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // CAMERA STOPPED
+                // =================================================
+
+                if (
+                    type ===
+                    "camera_stopped"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // CAMERA ERROR
+                // =================================================
+
+                if (
+                    type ===
+                    "camera_error"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // NOTIFICATION
+                // =================================================
+
+                if (
+                    type ===
+                    "notification"
+                ) {
+
+                    relayToPhone(
+                        message
+                    );
+
+                    return;
+                }
+
+                // =================================================
+                // MESSAGE ACK
+                // =================================================
+
+                if (
+                    type ===
+                    "message_received"
+                ) {
+
+                    console.log(
+                        "MESSAGE ACK:",
+                        message.messageId
+                    );
+
+                    return;
                 }
             }
         );
 
         ws.on(
             "close",
-            () => {
+            function () {
 
-                for (
-                    const id in devices
+                if (
+                    ws.deviceId
                 ) {
 
-                    if (
-                        devices[id].socket === ws
-                    ) {
-
-                        console.log(
-                            "DEVICE DISCONNECTED:",
-                            id
+                    const current =
+                        devices.get(
+                            ws.deviceId
                         );
 
-                        delete devices[id];
+                    if (
+                        current &&
+                        current.ws === ws
+                    ) {
+
+                        devices.delete(
+                            ws.deviceId
+                        );
                     }
+
+                    console.log(
+                        "DISCONNECTED:",
+                        ws.deviceId
+                    );
                 }
             }
         );
 
         ws.on(
             "error",
-            (error) => {
+            function (error) {
 
                 console.log(
-                    "SOCKET ERROR:",
+                    "WebSocket error:",
                     error.message
                 );
             }
+        );
+    }
+);
+
+wss.on(
+    "listening",
+    function () {
+
+        const address =
+            wss.address();
+
+        console.log(
+            "Nexus Link server running on port",
+            address.port
         );
     }
 );
